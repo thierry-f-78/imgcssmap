@@ -17,7 +17,11 @@ test: imgcssmap
 		test_images/glyphicons/*.png \
 		test_images/plastic_new_year/*/*.png \
 		test_images/woody_social_icons/*.png
-	H="$$(echo "<link rel='stylesheet' href='a.css' type='text/css'>"; cat a.html)" && \
+	H="$$( \
+		echo "<style>body{background: url('test_images/bg.png');}</style>"; \
+		echo "<link rel='stylesheet' href='a.css' type='text/css'>"; \
+		cat a.html; \
+	)" && \
 	echo "$$H" > a.html
 
 clean:
