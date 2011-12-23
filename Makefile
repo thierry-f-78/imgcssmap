@@ -8,7 +8,7 @@ imgcssmap: imgcssmap.o
 imgcssmap.o: imgcssmap.c
 
 test: imgcssmap
-	./imgcssmap \
+	./imgcssmap -q 4 \
 		-o a.png \
 		-t test_files/a.css.tpl a.css \
 		-t test_files/a.html.tpl a.html \
