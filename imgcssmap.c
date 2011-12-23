@@ -288,6 +288,16 @@ void fill(struct surface *surf, int larg, int sx, int sy, struct node *n)
 	}
 }
 
+int compar(const void *ia, const void *ib)
+{
+	const struct node * const *ia1 = ia;
+	const struct node * const *ib1 = ib;
+	const struct node *a = *ia1;
+	const struct node *b = *ib1;
+
+	return a->surface < b->surface;
+}
+
 int main(int argc, char *argv[])
 {
 	int smin = 0;
@@ -346,7 +356,7 @@ int main(int argc, char *argv[])
 	surf = calloc(sizeof(struct surface), larg * ymax);
 
 	/* on ordone les images */
-	// TODO
+	qsort(pool, nb_img, sizeof(struct node *), compar);
 
 	/* on va placer les locs par ordre de taille */
 	for (i=0; i<nb_img; i++) {
