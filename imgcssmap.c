@@ -39,9 +39,6 @@ struct node *openpng(const char *name)
 	int bit_depth;
 	int color_type;
 	int i;
-	int l;
-	int x;
-	int alpha;
 
 	/* ouverture du fichier */
 	fh = fopen(name, "r");
@@ -122,8 +119,8 @@ struct node *openpng(const char *name)
 		png_set_strip_16(n->png_ptr);
 	
 	/* add alpha channel */
+		png_set_add_alpha(n->png_ptr, 0xff, PNG_FILLER_AFTER);
 	if ((color_type & PNG_COLOR_MASK_ALPHA) == 0) {
-		png_set_add_alpha(n->png_ptr, 0xff, PNG_FILLER_BEFORE);
 	}
 
 	/* adds a full alpha channel if there is transparency information in a tRNS chunk */
@@ -149,19 +146,6 @@ struct node *openpng(const char *name)
 
 	/* load image */
 	png_read_image(n->png_ptr, n->row_pointers);
-
-	/* swap alpha */
-	if ((color_type & PNG_COLOR_MASK_ALPHA) == 0) {
-		for (l=0; l<n->height; l++) {
-			for(x=0; x<n->width*4; x+=4) {
-				alpha = n->row_pointers[l][x+0];
-				n->row_pointers[l][x+0] = n->row_pointers[l][x+1];
-				n->row_pointers[l][x+1] = n->row_pointers[l][x+2];
-				n->row_pointers[l][x+2] = n->row_pointers[l][x+3];
-				n->row_pointers[l][x+3] = alpha;
-			}
-		}
-	}
 
 	fclose(fh);
 
