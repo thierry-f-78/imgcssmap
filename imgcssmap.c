@@ -9,9 +9,6 @@
 #include <png.h>
 
 struct node {
-	png_structp png_ptr;
-	png_infop info_ptr;
-
 	png_uint_32 width;
 	png_uint_32 height;
 
@@ -36,6 +33,8 @@ struct node *openpng(const char *name)
 	unsigned char sig[8];
 	struct node *n;
 	FILE *fh;
+	png_structp png_ptr;
+	png_infop info_ptr;
 	int bit_depth;
 	int color_type;
 	int i;
@@ -63,38 +62,38 @@ struct node *openpng(const char *name)
 	}
 
 	/* on fabrique la structure qui va recevoir l'image */
-	n->png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-	if (!n->png_ptr) {
+	png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+	if (!png_ptr) {
 		fprintf(stderr, "out of memory\n");
 		exit(1);
 	}
 
 	/* on fabrique la structure qui contient les infos sur l'image */
-	n->info_ptr = png_create_info_struct(n->png_ptr);
-	if (!n->info_ptr) {
+	info_ptr = png_create_info_struct(png_ptr);
+	if (!info_ptr) {
 		fprintf(stderr, "out of memory\n");
 		exit(1);
 	}
 
 	/* traitement des erreurs */
-	if (setjmp(n->png_ptr->jmpbuf)) {
+	if (setjmp(png_ptr->jmpbuf)) {
 		fprintf(stderr, "png read \"%s\" error. ignoring file\n", name);
-		png_destroy_read_struct(&n->png_ptr, &n->info_ptr, NULL);
+		png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
 		free(n);
 		return NULL;
 	}
 
 	/* positionne le handler du fichier qui sera utilisé pour la lecture */
-	png_init_io(n->png_ptr, fh);
+	png_init_io(png_ptr, fh);
 
 	/* do not check the signature */
-	png_set_sig_bytes(n->png_ptr, 8);
+	png_set_sig_bytes(png_ptr, 8);
 
 	/* read the png file info */
-	png_read_info(n->png_ptr, n->info_ptr);
+	png_read_info(png_ptr, info_ptr);
 
 	/* recupere les infos concernant l'image */
-	png_get_IHDR(n->png_ptr, n->info_ptr,
+	png_get_IHDR(png_ptr, info_ptr,
 	             &n->width, &n->height, &bit_depth, &color_type,
 	             NULL, NULL, NULL);
 	
@@ -103,29 +102,29 @@ struct node *openpng(const char *name)
 
 		/* transform grayscale of less than 8 to 8 bits */
 		if (bit_depth < 8)
-			png_set_gray_1_2_4_to_8(n->png_ptr);
+			png_set_gray_1_2_4_to_8(png_ptr);
 
-		png_set_gray_to_rgb(n->png_ptr);
+		png_set_gray_to_rgb(png_ptr);
 	}
 
 	/* changes paletted images to RGB */
 	if ((color_type & PNG_COLOR_MASK_PALETTE) != 0)
-		png_set_palette_to_rgb(n->png_ptr);
+		png_set_palette_to_rgb(png_ptr);
 	
 	/* PNG can have files with 16 bits per channel. If you only can handle 8 bits
 	 * per channel, this will strip the pixels down to 8 bit.
 	 */
 	if (bit_depth == 16)
-		png_set_strip_16(n->png_ptr);
+		png_set_strip_16(png_ptr);
 	
 	/* add alpha channel */
-		png_set_add_alpha(n->png_ptr, 0xff, PNG_FILLER_AFTER);
 	if ((color_type & PNG_COLOR_MASK_ALPHA) == 0) {
+		png_set_add_alpha(png_ptr, 0xff, PNG_FILLER_AFTER);
 	}
 
 	/* adds a full alpha channel if there is transparency information in a tRNS chunk */
-	if (png_get_valid(n->png_ptr, n->info_ptr, PNG_INFO_tRNS))
-		png_set_tRNS_to_alpha(n->png_ptr);
+	if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS))
+		png_set_tRNS_to_alpha(png_ptr);
 	
 	/* calcule la surface de l'image */
 	n->surface = n->width * n->height;
@@ -145,9 +144,10 @@ struct node *openpng(const char *name)
 	}
 
 	/* load image */
-	png_read_image(n->png_ptr, n->row_pointers);
+	png_read_image(png_ptr, n->row_pointers);
 
 	fclose(fh);
+	png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
 
 	return n;
 }
