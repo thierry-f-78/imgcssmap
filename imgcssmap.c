@@ -29,6 +29,17 @@ struct surface {
 	unsigned char a;
 };
 
+void usage()
+{
+	fprintf(stderr, 
+	"\n"
+	"imgcssmap -o output_image input_file [...]\n"
+	"\n"
+	"   -o output_image     image builded\n"
+	"\n"
+	);
+}
+
 static inline
 void image_memory(struct node *n)
 {
@@ -457,15 +468,59 @@ int main(int argc, char *argv[])
 	int x;
 	int y;
 	int top = 0;
-	int nb_img = argc - 1;
+	int nb_img;
 	int idx = 0;
 	int do_break;
+	const char *output_image = NULL;
 
 	/* memoire pour le tri */
 	pool = calloc(sizeof(struct node *), argc - 1);
 
-	/* charge les images */
+	/* load options */
 	for (i=1; i<argc; i++) {
+
+		/*
+		 *
+		 * output image file
+		 *
+		 */
+		/**/ if (strcmp(argv[i], "-o") == 0) {
+			i++;
+			if (i >= argc) {
+				fprintf(stderr, "option -i expect file\n");
+				usage();
+				exit(1);
+			}
+			output_image = argv[i];
+		}
+		/*
+		 * 
+		 * end of option, now load images
+		 *
+		 */
+		else
+			break;
+	}
+
+	/* no input files */
+	if (i >= argc) {
+		fprintf(stderr, "no input files\n");
+		usage();
+		exit(1);
+	}
+
+	/* check configuration */
+	if (output_image == NULL) {
+		fprintf(stderr, "no outimage\n");
+		usage();
+		exit(1);
+	}
+
+	/* number of images */
+	nb_img = argc - i;
+
+	/* charge les images */
+	for (; i<argc; i++) {
 
 		/* open png image */
 		node = openimage(argv[i]);
@@ -542,7 +597,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	drawpng(surf, larg, top, "test/result.png");
+	/* draw png outpout image */
+	drawpng(surf, larg, top, output_image);
 
 	return 0;
 }
