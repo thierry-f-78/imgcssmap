@@ -84,7 +84,8 @@ void usage()
 {
 	fprintf(stderr, 
 	"\n"
-	"imgcssmap [-t in_file out_file [-t in out [...]]] [-q 1-6]\n"
+/*	 12345678901234567890123456789012345678901234567890123456789012345678901234567890 */
+	"imgcssmap [-t in_file out_file [-t in out [...]]] [-q 1-6] [-i]\n"
 	"          -o output_image input_file [...]\n"
 	"\n"
 	"   -t in_file out_file   in_file containing the template (typically CSS)\n"
@@ -92,6 +93,7 @@ void usage()
 	"   -q 1-6                quality of colours. 6 is 8 bits per chanel quality\n"
 	"                         5 is 7 bits, 4 is 6 bits, 3 is 5 bits, 2 is 4 bits\n"
 	"                         and 1 is 3 bits\n"
+	"   -i                    interlace png output image\n"
 	"   -o output_image       image builded\n"
 	"\n"
 	"the template may contain this variables:\n"
@@ -391,7 +393,7 @@ struct node *openimage(const char *name)
 	exit(1);
 }
 
-void drawpng(struct surface *buffer, int width, int height, int qual, const char *name)
+void drawpng(struct surface *buffer, int width, int height, int qual, int interlace, const char *name)
 {
 	FILE *fp;
 	png_structp png_ptr;
@@ -401,6 +403,8 @@ void drawpng(struct surface *buffer, int width, int height, int qual, const char
 	int basey;
 	int x;
 	int y;
+	int passes;
+	int n;
 
 	/* Open file for writing (binary mode) */
 	fp = fopen(name, "wb");
@@ -433,8 +437,11 @@ void drawpng(struct surface *buffer, int width, int height, int qual, const char
 
 	/* Write header (8 bit colour depth + alpha) */
 	png_set_IHDR(png_ptr, info_ptr, width, height,
-	             8, PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE,
-	             PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+	             8,
+	             PNG_COLOR_TYPE_RGB_ALPHA,
+	             interlace ?  PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE, 
+	             PNG_COMPRESSION_TYPE_BASE,
+	             PNG_FILTER_TYPE_BASE);
 
 	/* write png info into file */
 	png_write_info(png_ptr, info_ptr);
@@ -442,31 +449,39 @@ void drawpng(struct surface *buffer, int width, int height, int qual, const char
 	/* Allocate memory for one row (3 bytes per pixel - RGB) */
 	row = (png_bytep) malloc(4 * width * sizeof(png_byte));
 
+	/* number of passes */
+	if (interlace)
+		passes = png_set_interlace_handling(png_ptr);
+	else
+		passes = 1;
+
 	/* Write image data */
-	for (y=0 ; y<height ; y++) {
-		basey = y * width;
-		for (x=0 ; x<width ; x++) {
-			basex = x * 4;
-			if (buffer[y*width + x].used != 0) {
-				if (buffer[basey+x].a != 0x00) {
-					row[basex+0] = buffer[basey+x].r & color_mask[qual];
-					row[basex+1] = buffer[basey+x].g & color_mask[qual];
-					row[basex+2] = buffer[basey+x].b & color_mask[qual];
-					row[basex+3] = buffer[basey+x].a & color_mask[qual];
+	for(n=0; n<passes; n++) {
+		for (y=0 ; y<height ; y++) {
+			basey = y * width;
+			for (x=0 ; x<width ; x++) {
+				basex = x * 4;
+				if (buffer[y*width + x].used != 0) {
+					if (buffer[basey+x].a != 0x00) {
+						row[basex+0] = buffer[basey+x].r & color_mask[qual];
+						row[basex+1] = buffer[basey+x].g & color_mask[qual];
+						row[basex+2] = buffer[basey+x].b & color_mask[qual];
+						row[basex+3] = buffer[basey+x].a & color_mask[qual];
+					} else {
+						row[basex+0] = 0x00;
+						row[basex+1] = 0x00;
+						row[basex+2] = 0x00;
+						row[basex+3] = 0x00;
+					}
 				} else {
 					row[basex+0] = 0x00;
 					row[basex+1] = 0x00;
 					row[basex+2] = 0x00;
 					row[basex+3] = 0x00;
 				}
-			} else {
-				row[basex+0] = 0x00;
-				row[basex+1] = 0x00;
-				row[basex+2] = 0x00;
-				row[basex+3] = 0x00;
 			}
+			png_write_row(png_ptr, row);
 		}
-		png_write_row(png_ptr, row);
 	}
 
 	/* End write */
@@ -776,6 +791,7 @@ int main(int argc, char *argv[])
 	struct template *tpl;
 	char *error;
 	int qual = 5;
+	int interlace = 0;
 
 	/* memoire pour le tri */
 	pool = calloc(sizeof(struct node *), argc - 1);
@@ -845,6 +861,15 @@ int main(int argc, char *argv[])
 				exit(1);
 			}
 			qual--;
+		}
+
+		/*
+		 *
+		 * interlace
+		 *
+		 */
+		else if (strcmp(argv[i], "-i") == 0) {
+			interlace = 1;
 		}
 
 		/*
@@ -962,7 +987,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* draw png outpout image */
-	drawpng(surf, larg, top, qual, output_image);
+	drawpng(surf, larg, top, qual, interlace, output_image);
 
 	/* close templates */
 	for (tpl = templates;
