@@ -38,6 +38,12 @@ struct node {
 	char *azname;
 };
 
+struct color {
+	unsigned char r;
+	unsigned char g;
+	unsigned char b;
+};
+
 struct surface {
 	unsigned char used;
 	unsigned char r;
@@ -85,7 +91,7 @@ void usage()
 	fprintf(stderr, 
 	"\n"
 /*	 12345678901234567890123456789012345678901234567890123456789012345678901234567890 */
-	"imgcssmap [-t in_file out_file [-t in out [...]]] [-q 1-6] [-i]\n"
+	"imgcssmap [-t in_file out_file [-t in out [...]]] [-q 1-6] [-i] [-na rrggbb]\n"
 	"          -o output_image input_file [...]\n"
 	"\n"
 	"   -t in_file out_file   in_file containing the template (typically CSS)\n"
@@ -93,6 +99,8 @@ void usage()
 	"   -q 1-6                quality of colours. 6 is 8 bits per chanel quality\n"
 	"                         5 is 7 bits, 4 is 6 bits, 3 is 5 bits, 2 is 4 bits\n"
 	"                         and 1 is 3 bits\n"
+	"   -na rrggbb            remove alpha channel and replace it by the rrggbb\n"
+	"                         rrggbb is hexadecimal representation of the color\n"
 	"   -i                    interlace png output image\n"
 	"   -o output_image       image builded\n"
 	"\n"
@@ -393,7 +401,11 @@ struct node *openimage(const char *name)
 	exit(1);
 }
 
-void drawpng(struct surface *buffer, int width, int height, int qual, int interlace, const char *name)
+#define appli_alpha(__c, __b, __a) \
+	( ( (__c * __a) + ( (__b * (255 - __a) ) ) ) / 255)
+
+void drawpng(struct surface *buffer, int width, int height, int qual, int interlace,
+             struct color *alpha, const char *name)
 {
 	FILE *fp;
 	png_structp png_ptr;
@@ -438,7 +450,7 @@ void drawpng(struct surface *buffer, int width, int height, int qual, int interl
 	/* Write header (8 bit colour depth + alpha) */
 	png_set_IHDR(png_ptr, info_ptr, width, height,
 	             8,
-	             PNG_COLOR_TYPE_RGB_ALPHA,
+	             alpha ? PNG_COLOR_TYPE_RGB : PNG_COLOR_TYPE_RGB_ALPHA,
 	             interlace ?  PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE, 
 	             PNG_COMPRESSION_TYPE_BASE,
 	             PNG_FILTER_TYPE_BASE);
@@ -460,20 +472,43 @@ void drawpng(struct surface *buffer, int width, int height, int qual, int interl
 		for (y=0 ; y<height ; y++) {
 			basey = y * width;
 			for (x=0 ; x<width ; x++) {
-				basex = x * 4;
-				if (buffer[y*width + x].used != 0) {
-					if (buffer[basey+x].a != 0x00) {
-						row[basex+0] = buffer[basey+x].r & color_mask[qual];
-						row[basex+1] = buffer[basey+x].g & color_mask[qual];
-						row[basex+2] = buffer[basey+x].b & color_mask[qual];
-						row[basex+3] = buffer[basey+x].a & color_mask[qual];
-					} else {
-						row[basex+0] = 0x00;
-						row[basex+1] = 0x00;
-						row[basex+2] = 0x00;
-						row[basex+3] = 0x00;
-					}
-				} else {
+
+				if (alpha != NULL)
+					basex = x * 3;
+				else
+					basex = x * 4;
+
+				/* unused pixel */
+				if (buffer[y*width + x].used == 0) {
+					row[basex+0] = 0x00;
+					row[basex+1] = 0x00;
+					row[basex+2] = 0x00;
+					row[basex+3] = 0x00;
+				}
+
+				/* compute pixel color with background color and alpha channel */
+				else if (alpha != NULL) {
+					unsigned char a = buffer[basey+x].a;
+					unsigned char r = buffer[basey+x].r;
+					unsigned char g = buffer[basey+x].g;
+					unsigned char b = buffer[basey+x].b;
+
+					row[basex+0] = appli_alpha(r, alpha->r, a) & color_mask[qual];
+					row[basex+1] = appli_alpha(g, alpha->g, a) & color_mask[qual];
+					row[basex+2] = appli_alpha(b, alpha->b, a) & color_mask[qual];
+					row[basex+3] = 0xff;
+				}
+
+				/* copy pixel */
+				else if (buffer[basey+x].a != 0x00) {
+					row[basex+0] = buffer[basey+x].r & color_mask[qual];
+					row[basex+1] = buffer[basey+x].g & color_mask[qual];
+					row[basex+2] = buffer[basey+x].b & color_mask[qual];
+					row[basex+3] = buffer[basey+x].a & color_mask[qual];
+				}
+
+				/* pixel is transparent, set to 0 */
+				else {
 					row[basex+0] = 0x00;
 					row[basex+1] = 0x00;
 					row[basex+2] = 0x00;
@@ -768,6 +803,52 @@ char *do_azname(const char *name)
 	return n;
 }
 
+static inline
+int hex_conv(char c)
+{
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F')
+		return c - 'A' + 10;
+	return -1;
+}
+
+static inline
+int byte_conv(char *c)
+{
+	int res1;
+	int res2;
+
+	res1 = hex_conv(c[0]);
+	res2 = hex_conv(c[1]);
+	if (res1 < 0 || res2 < 0)
+		return -1;
+	return ( res1 << 4 ) + res2;
+}
+
+static inline
+int color_conv(char *in, struct color *c)
+{
+	int r;
+	int g;
+	int b;
+
+	r = byte_conv(&in[0]);
+	g = byte_conv(&in[2]);
+	b = byte_conv(&in[4]);
+
+	if (r < 0 || g < 0 || b < 0)
+		return -1;
+
+	c->r = r;
+	c->g = g;
+	c->b = b;
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int smin = 0;
@@ -792,6 +873,8 @@ int main(int argc, char *argv[])
 	char *error;
 	int qual = 5;
 	int interlace = 0;
+	struct color _alpha;
+	struct color *alpha = NULL;
 
 	/* memoire pour le tri */
 	pool = calloc(sizeof(struct node *), argc - 1);
@@ -870,6 +953,31 @@ int main(int argc, char *argv[])
 		 */
 		else if (strcmp(argv[i], "-i") == 0) {
 			interlace = 1;
+		}
+
+		/*
+		 *
+		 * remove alpha chanel
+		 *
+		 */
+		else if (strcmp(argv[i], "-na") == 0) {
+			i++;
+			if (i >= argc) {
+				fprintf(stderr, "option -na expect a value rrggbb\n");
+				usage();
+				exit(1);
+			}
+			if (strlen(argv[i]) != 6) {
+				fprintf(stderr, "option -na expect a value rrggbb\n");
+				usage();
+				exit(1);
+			}
+			alpha = &_alpha;
+			if (color_conv(argv[i], alpha) < 0)  {
+				fprintf(stderr, "option -na expect a value rrggbb\n");
+				usage();
+				exit(1);
+			}
 		}
 
 		/*
@@ -987,7 +1095,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* draw png outpout image */
-	drawpng(surf, larg, top, qual, interlace, output_image);
+	drawpng(surf, larg, top, qual, interlace, alpha, output_image);
 
 	/* close templates */
 	for (tpl = templates;
