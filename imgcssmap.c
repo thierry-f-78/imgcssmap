@@ -193,16 +193,16 @@ struct node *openpng(const char *name)
 	/* ouverture du fichier */
 	fh = fopen(name, "r");
 	if (fh == NULL) {
-		fprintf(stderr, "cant not open file \"%s\": %s. File ignored\n",
+		fprintf(stderr, "cant not open file \"%s\": %s\n",
 		        name, strerror(errno));
-		return NULL;
+		exit(1);
 	}
 
 	/* on verifie la signature */
 	fread(sig, 1, 8, fh);
 	if (!png_check_sig(sig, 8)) {
-		fprintf(stderr, "bad png signature \"%s\": File ignored\n", name);
-		return NULL;
+		fprintf(stderr, "bad png signature \"%s\"\n", name);
+		exit(1);
 	}
 
 	/* on fabrique le noeud qui va contenir l'image */
@@ -228,10 +228,8 @@ struct node *openpng(const char *name)
 
 	/* traitement des erreurs */
 	if (setjmp(png_ptr->jmpbuf)) {
-		fprintf(stderr, "png read \"%s\" error. ignoring file\n", name);
-		png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-		free(n);
-		return NULL;
+		fprintf(stderr, "png read \"%s\" error\n", name);
+		exit(1);
 	}
 
 	/* positionne le handler du fichier qui sera utilisé pour la lecture */
