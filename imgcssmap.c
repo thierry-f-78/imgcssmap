@@ -448,10 +448,17 @@ void drawpng(struct surface *buffer, int width, int height, int qual, const char
 		for (x=0 ; x<width ; x++) {
 			basex = x * 4;
 			if (buffer[y*width + x].used != 0) {
-				row[basex+0] = buffer[basey+x].r & color_mask[qual];
-				row[basex+1] = buffer[basey+x].g & color_mask[qual];
-				row[basex+2] = buffer[basey+x].b & color_mask[qual];
-				row[basex+3] = buffer[basey+x].a & color_mask[qual];
+				if (buffer[basey+x].a != 0x00) {
+					row[basex+0] = buffer[basey+x].r & color_mask[qual];
+					row[basex+1] = buffer[basey+x].g & color_mask[qual];
+					row[basex+2] = buffer[basey+x].b & color_mask[qual];
+					row[basex+3] = buffer[basey+x].a & color_mask[qual];
+				} else {
+					row[basex+0] = 0x00;
+					row[basex+1] = 0x00;
+					row[basex+2] = 0x00;
+					row[basex+3] = 0x00;
+				}
 			} else {
 				row[basex+0] = 0x00;
 				row[basex+1] = 0x00;
