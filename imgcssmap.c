@@ -290,6 +290,30 @@ struct node *openpng(const char *name)
 	return n;
 }
 
+struct node *openimage(const char *name)
+{
+	const char *ext;
+
+	/* get extension */
+	ext = strrchr(name, '.');
+	if (ext == NULL)
+		return NULL;
+	
+	ext++;
+
+	/* jpeg file */
+	/**/ if (strcasecmp(ext, "jpg") == 0 ||
+	         strcasecmp(ext, "jpeg") == 0)
+		return openjpg(name);
+
+	/* png file */
+	else if (strcasecmp(ext, "png") == 0)
+		return openpng(name);
+	
+	fprintf(stderr, "unmanaged file format \"%s\"\n", name);
+	exit(1);
+}
+
 void drawpng(struct surface *buffer, int width, int height, const char *name)
 {
 	FILE *fp;
@@ -444,7 +468,7 @@ int main(int argc, char *argv[])
 	for (i=1; i<argc; i++) {
 
 		/* open png image */
-		node = openpng(argv[i]);
+		node = openimage(argv[i]);
 		if (node == NULL) {
 			nb_img --;
 			continue;
