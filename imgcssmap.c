@@ -7,6 +7,7 @@
 #include <math.h>
 
 #include <png.h>
+#include <jpeglib.h>
 
 struct node {
 	png_uint_32 width;
@@ -28,6 +29,157 @@ struct surface {
 	unsigned char a;
 };
 
+static inline
+void image_memory(struct node *n)
+{
+	int i;
+
+	/* de la memoire pour charger l'image */
+	n->row_pointers = calloc(sizeof(png_bytep), n->height);
+	if (n->row_pointers == NULL) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+	for (i=0; i<n->height; i++) {
+		n->row_pointers[i] = calloc(n->width, 4);
+		if (n->row_pointers[i] == NULL) {
+			fprintf(stderr, "out of memory\n");
+			exit(1);
+		}
+	}
+}
+
+struct node *openjpg(const char *filename)
+{
+	struct jpeg_decompress_struct cinfo;
+	struct jpeg_error_mgr jerr;
+	JSAMPROW row_pointer;
+	FILE *infile;
+	unsigned long location = 0;
+	int i = 0;
+	int x;
+	struct node *n;
+
+	infile = fopen(filename, "r");
+	if (infile == NULL) {
+		fprintf(stderr, "Error opening jpeg file %s\n!", filename);
+		return NULL;
+	}
+
+	/* on fabrique le noeud qui va contenir l'image */
+	n = malloc(sizeof(struct node));
+	if (n == NULL) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+
+	/* here we set up the standard libjpeg error handler */
+	cinfo.err = jpeg_std_error(&jerr);
+
+	/* setup decompression process and source, then read JPEG header */
+	jpeg_create_decompress(&cinfo);
+
+	/* this makes the library read from infile */
+	jpeg_stdio_src(&cinfo, infile);
+
+	/* reading the image header which contains image information */
+	jpeg_read_header(&cinfo, TRUE);
+
+#if 0
+	printf( "Color components per pixel: %d.\n", cinfo.num_components );
+	printf( "Color space: %d.\n", cinfo.jpeg_color_space );
+#endif
+
+	/* Uncomment the following to output image information, if needed. */
+	n->width = cinfo.image_width;
+	n->height = cinfo.image_height;
+	n->surface = n->width * n->height;
+ 
+	/* Start decompression jpeg here */
+	jpeg_start_decompress(&cinfo);
+
+	/* allocate memory to hold the uncompressed image */
+	image_memory(n);
+
+	/* now actually read the jpeg into the raw buffer */
+	row_pointer = malloc(cinfo.output_width * cinfo.num_components);
+
+	/* read one scan line at a time */
+	location = 0;
+	while (cinfo.output_scanline < cinfo.image_height) {
+
+		/* read one line */
+		jpeg_read_scanlines(&cinfo, &row_pointer, 1);
+
+		/* copy RGB line */
+		if (cinfo.jpeg_color_space == JCS_RGB || 
+		    cinfo.jpeg_color_space == JCS_YCbCr) {
+			x = 0;
+			for (i=0; i<n->width*3; i+=3) {
+				n->row_pointers[location][x+0] = row_pointer[i+0];
+				n->row_pointers[location][x+1] = row_pointer[i+1];
+				n->row_pointers[location][x+2] = row_pointer[i+2];
+				n->row_pointers[location][x+3] = 0xff;
+				x += 4;
+			}
+		}
+
+		/* copy yuv line */
+#if 0
+		if (cinfo.jpeg_color_space == JCS_YCbCr) {
+			double y;
+			double u;
+			double v;
+			double r;
+			double g;
+			double b;
+			x = 0;
+			for (i=0; i<n->width*3; i+=3) {
+
+				y = row_pointer[i+0];
+				u = row_pointer[i+1];
+				v = row_pointer[i+2];
+
+				r = ( 1.164 * (y - 16) ) + ( 1.596 * (v - 128) );
+				g = ( 1.164 * (y - 16) ) - ( 0.813 * (v - 128) ) - ( 0.391* (u - 128) );
+				b = ( 1.164 * (y - 16) ) + ( 2.018 * (u - 128) );
+
+				n->row_pointers[location][x+0] = r;
+				n->row_pointers[location][x+1] = g;
+				n->row_pointers[location][x+2] = b;
+				n->row_pointers[location][x+3] = 0xff;
+
+				x += 4;
+			}
+		}
+#endif
+
+		/* copy and convert grayscale line */
+		if (cinfo.jpeg_color_space == JCS_GRAYSCALE) {	
+			x = 0;
+			for (i=0; i<n->width; i++) {
+				n->row_pointers[location][x+0] = row_pointer[i+0];
+				n->row_pointers[location][x+1] = row_pointer[i+0];
+				n->row_pointers[location][x+2] = row_pointer[i+0];
+				n->row_pointers[location][x+3] = 0xff;
+				x += 4;
+			}
+		}
+
+		/* next line */
+		location++;
+	}
+
+	/* wrap up decompression, destroy objects, free pointers and close open files */
+	jpeg_finish_decompress(&cinfo);
+	jpeg_destroy_decompress(&cinfo);
+	free(row_pointer);
+	fclose(infile);
+
+	/* yup, we succeeded! */
+	return n;
+}
+
 struct node *openpng(const char *name)
 {
 	unsigned char sig[8];
@@ -37,7 +189,6 @@ struct node *openpng(const char *name)
 	png_infop info_ptr;
 	int bit_depth;
 	int color_type;
-	int i;
 
 	/* ouverture du fichier */
 	fh = fopen(name, "r");
@@ -130,18 +281,7 @@ struct node *openpng(const char *name)
 	n->surface = n->width * n->height;
 
 	/* de la memoire pour charger l'image */
-	n->row_pointers = calloc(sizeof(png_bytep), n->height);
-	if (n->row_pointers == NULL) {
-		fprintf(stderr, "out of memory\n");
-		exit(1);
-	}
-	for (i=0; i<n->height; i++) {
-		n->row_pointers[i] = calloc(n->width, 4);
-		if (n->row_pointers[i] == NULL) {
-			fprintf(stderr, "out of memory\n");
-			exit(1);
-		}
-	}
+	image_memory(n);
 
 	/* load image */
 	png_read_image(png_ptr, n->row_pointers);

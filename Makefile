@@ -1,5 +1,5 @@
 CFLAGS = -g -Wall -Werror
-LDFLAGS = -lpng 
+LDFLAGS = -lpng -ljpeg
 
 all: imgcssmap
 
