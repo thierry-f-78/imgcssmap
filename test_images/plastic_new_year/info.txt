@@ -1,0 +1,9 @@
+Author:     PaintIcon
+
+Homepage:   http://www.painticon.com/en/
+
+Service:    Design service for custom icons.
+            Please contact author to request a quote.
+
+License:    CC Attribution-Noncommercial-No Derivate 3.0
+            Commercial usage: Not allowed
