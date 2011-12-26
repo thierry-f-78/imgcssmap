@@ -8,7 +8,7 @@ imgcssmap: imgcssmap.o
 imgcssmap.o: imgcssmap.c
 
 test: imgcssmap
-	./imgcssmap -q 4 \
+	./imgcssmap -q 4 -c \
 		-o a.png \
 		-t test_files/a.css.tpl a.css \
 		-t test_files/a.html.tpl a.html \
@@ -17,12 +17,7 @@ test: imgcssmap
 		test_images/glyphicons/*.png \
 		test_images/plastic_new_year/*/*.png \
 		test_images/woody_social_icons/*.png
-	H="$$( \
-		echo "<style>body{background: url('test_images/bg.png');}</style>"; \
-		echo "<link rel='stylesheet' href='a.css' type='text/css'>"; \
-		cat a.html; \
-	)" && \
-	echo "$$H" > a.html
+	H="$$(cat test_files/a.header.html a.html;)" && echo "$$H" > a.html
 
 clean:
 	rm -f imgcssmap.o imgcssmap a.css a.html a.png test.txt

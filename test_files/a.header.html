@@ -1,0 +1,24 @@
+<link rel='stylesheet' href='a.css' type='text/css'>
+<script>
+	function set_white()
+	{
+		document.getElementsByTagName("body")[0].style.background = "#ffffff";
+	}
+
+	function set_black()
+	{
+		document.getElementsByTagName("body")[0].style.background = "#000000";
+	}
+
+	function set_transparency()
+	{
+		document.getElementsByTagName("body")[0].style.background = "url('test_images/bg.png')";
+	}
+</script>
+<div style="background: #ffffff;">
+	<a href="javascript:set_white();">white</a> - 
+	<a href="javascript:set_black();">black</a> - 
+	<a href="javascript:set_transparency();">transparency</a>
+</div>
+<br />
+
