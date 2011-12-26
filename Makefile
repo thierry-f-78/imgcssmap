@@ -1,3 +1,6 @@
+# get build version from the git tree in the form "lasttag-changes", and use "dev" if unknown
+BUILDVER := $(shell ref=`(git describe --tags) 2>/dev/null` && ref=$${ref%-g*} && echo "$${ref\#v}")
+
 CFLAGS = -g -Wall -Werror
 LDFLAGS = -lpng -ljpeg
 
@@ -21,3 +24,6 @@ test: imgcssmap
 
 clean:
 	rm -f imgcssmap.o imgcssmap a.css a.html a.png test.txt
+
+tar:
+	git archive --format tar --prefix "imgcssmap-$(BUILDVER)/" $(BUILDVER) | gzip > imgcssmap-$(BUILDVER).tar.gz
