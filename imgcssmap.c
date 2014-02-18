@@ -641,32 +641,11 @@ void drawpng(struct surface *buffer, int width, int height, int qual, int interl
 	free(row);
 }
 
-struct template *load_tpl(const char *in_file, const char *out_file)
+char *load_file(const char *in_file)
 {
-	enum template_elem_type type;
-	struct template *tpl;
-	int fd;
 	struct stat buf;
+	int fd;
 	char *bloc;
-	char *var;
-	char *nvar;
-	char *p;
-	char *cont;
-
-	/* memory for the template */
-	tpl = calloc(sizeof(struct template), 1);
-	if (tpl == NULL) {
-		fprintf(stderr, "out of memory\n");
-		exit(1);
-	}
-
-	/* open output template file */
-	tpl->fh = fopen(out_file, "w");
-	if (tpl->fh == NULL) {
-		fprintf(stderr, "cannot open file \"%s\": %s\n",
-		        out_file, strerror(errno));
-		exit(1);
-	}
 
 	/* get size */
 	if (stat(in_file, &buf) < 0) {
@@ -700,6 +679,36 @@ struct template *load_tpl(const char *in_file, const char *out_file)
 
 	/* close inpout template file */
 	close(fd);
+
+	return bloc;
+}
+
+struct template *load_tpl(const char *in_file, const char *out_file)
+{
+	enum template_elem_type type;
+	struct template *tpl;
+	char *bloc;
+	char *var;
+	char *nvar;
+	char *p;
+	char *cont;
+
+	/* memory for the template */
+	tpl = calloc(sizeof(struct template), 1);
+	if (tpl == NULL) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+
+	/* open output template file */
+	tpl->fh = fopen(out_file, "w");
+	if (tpl->fh == NULL) {
+		fprintf(stderr, "cannot open file \"%s\": %s\n",
+		        out_file, strerror(errno));
+		exit(1);
+	}
+
+	bloc = load_file(in_file);
 
 	/* on decoupe tout ça */
 	p = bloc;
