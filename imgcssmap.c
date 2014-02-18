@@ -33,6 +33,11 @@ char color_mask[6] = {
 	0xff, /* 6 -> 8 bits */
 };
 
+struct general {
+	unsigned int hash;
+	const char *output;
+};
+
 struct node {
 	png_uint_32 width;
 	png_uint_32 height;
@@ -71,6 +76,8 @@ enum template_elem_type {
 	ELEM_OFFSETY,
 	ELEM_NAME,
 	ELEM_AZNAME,
+	ELEM_HASH,
+	ELEM_OUTPUT,
 	ELEM_ID,
 };
 
@@ -94,6 +101,8 @@ struct template {
 #define VAR_OFFSETY "$(offsety)"
 #define VAR_NAME    "$(name)"
 #define VAR_AZNAME  "$(azname)"
+#define VAR_HASH    "$(hash)"
+#define VAR_OUTPUT  "$(output)"
 #define VAR_ID      "$(id)"
 
 void usage()
@@ -127,6 +136,22 @@ void usage()
 	"   $(id)      the index after sorting. first image is 0.\n"
 	"\n"
 	);
+}
+
+static inline
+unsigned int hash(unsigned int in)
+{
+  /* 4-byte integer hash, full avalanche
+   * http://burtleburtle.net/bob/hash/integer.html
+   */
+  in = (in+0x7ed55d16) + (in<<12);
+  in = (in^0xc761c23c) ^ (in>>19);
+  in = (in+0x165667b1) + (in<<5);
+  in = (in+0xd3a2646c) ^ (in<<9);
+  in = (in+0xfd7046c5) + (in<<3);
+  in = (in^0xb55a4f09) ^ (in>>16);
+
+  return in;
 }
 
 static inline
@@ -734,6 +759,18 @@ struct template_elem *parse_tpl(const char *bloc, int *outnb)
 			type = ELEM_AZNAME;
 			cont = var + strlen(VAR_AZNAME);
 		}
+		nvar = strstr(p, VAR_HASH);
+		if (var == NULL || (nvar != NULL && nvar < var)) {
+			var = nvar;
+			type = ELEM_HASH;
+			cont = var + strlen(VAR_HASH);
+		}
+		nvar = strstr(p, VAR_OUTPUT);
+		if (var == NULL || (nvar != NULL && nvar < var)) {
+			var = nvar;
+			type = ELEM_OUTPUT;
+			cont = var + strlen(VAR_OUTPUT);
+		}
 		nvar = strstr(p, VAR_ID);
 		if (var == NULL || (nvar != NULL && nvar < var)) {
 			var = nvar;
@@ -822,7 +859,7 @@ struct template *load_tpl(const char *in_file, const char *hdr, const char *foot
 	return tpl;
 }
 
-void exec_tpl(struct template *tpl, int idx, struct node *node, int id)
+void exec_tpl(struct template *tpl, int idx, struct node *node, struct general *gen, int id)
 {
 	int i;
 
@@ -849,6 +886,12 @@ void exec_tpl(struct template *tpl, int idx, struct node *node, int id)
 		case ELEM_AZNAME:
 			fprintf(tpl->fh, "%s", node->azname);
 			break;
+		case ELEM_HASH:
+			fprintf(tpl->fh, "%08x", gen->hash);
+			break;
+		case ELEM_OUTPUT:
+			fprintf(tpl->fh, "%s", gen->output);
+			break;
 		case ELEM_ID:
 			fprintf(tpl->fh, "%d", id);
 			break;
@@ -856,7 +899,7 @@ void exec_tpl(struct template *tpl, int idx, struct node *node, int id)
 	}
 }
 
-void close_tpl(struct template *tpl)
+void close_tpl(struct template *tpl, struct general *general)
 {
 	struct node stnode;
 
@@ -867,7 +910,7 @@ void close_tpl(struct template *tpl)
 	stnode.name = "";
 	stnode.azname = "";
 
-	exec_tpl(tpl, 2, &stnode, 0);
+	exec_tpl(tpl, 2, &stnode, general, 0);
 
 	fclose(tpl->fh);
 }
@@ -1042,6 +1085,7 @@ int main(int argc, char *argv[])
 	struct color *alpha = NULL;
 	int do_crop = 0;
 	struct node stnode;
+	struct general gen;
 
 	/* memoire pour le tri */
 	pool = calloc(sizeof(struct node *), argc - 1);
@@ -1194,6 +1238,8 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	gen.output = output_image;
+
 	/* number of images */
 	nb_img = argc - i;
 
@@ -1283,6 +1329,21 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* img sign */
+	gen.hash = 0;
+	for (i = 0; i < larg * top; i++) {
+		gen.hash ^= hash( surf[i].r       ) |
+		                ( surf[i].g << 8  ) |
+		                ( surf[i].b << 16 ) |
+		                ( surf[i].a << 24 );
+	}
+
+	gen.hash ^= hash(larg);
+	gen.hash ^= hash(top);
+	gen.hash ^= hash(qual);
+	if (alpha)
+		gen.hash ^= hash(1);
+
 	/* Dump header templates file */
 	stnode.width = 0;
 	stnode.height = 0;
@@ -1293,21 +1354,21 @@ int main(int argc, char *argv[])
 	for (tpl = templates;
 	     tpl != NULL;
 	     tpl = tpl->next)
-		exec_tpl(tpl, 0, &stnode, 0);
+		exec_tpl(tpl, 0, &stnode, &gen, 0);
 
 	/* on parcours les images pour executer les templates */
 	for (i=0; i<nb_img; i++) {
 		for (tpl = templates;
 		     tpl != NULL; 
 		     tpl = tpl->next)
-			exec_tpl(tpl, 1, pool[i], i);
+			exec_tpl(tpl, 1, pool[i], &gen, i);
 	}
 
 	/* close templates */
 	for (tpl = templates;
 	     tpl != NULL; 
 	     tpl = tpl->next)
-		close_tpl(tpl);
+		close_tpl(tpl, &gen);
 
 	/* draw png outpout image */
 	drawpng(surf, larg, top, qual, interlace, alpha, output_image);
