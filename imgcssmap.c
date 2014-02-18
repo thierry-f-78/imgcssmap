@@ -124,7 +124,8 @@ void usage()
 	"                         rrggbb is hexadecimal representation of the color\n"
 	"   -i                    interlace png output image\n"
 	"   -c                    crop unused alpha space into input file\n"
-	"   -o output_image       image builded\n"
+	"   -o output_image       image builded. The name can contain 8 x 'X'. These\n"
+	"                         XXXXXXXX must be replaced by the imgcssmap hash.\n"
 	"\n"
 	"the template may contain this variables:\n"
 	"   $(width)   the image width\n"
@@ -1071,7 +1072,6 @@ int main(int argc, char *argv[])
 	int nb_img;
 	int idx = 0;
 	int do_break;
-	const char *output_image = NULL;
 	char *in = NULL;
 	char *hdr = NULL;
 	char *foot = NULL;
@@ -1086,6 +1086,8 @@ int main(int argc, char *argv[])
 	int do_crop = 0;
 	struct node stnode;
 	struct general gen;
+	char *p;
+	char hashstr[9];
 
 	/* memoire pour le tri */
 	pool = calloc(sizeof(struct node *), argc - 1);
@@ -1105,7 +1107,7 @@ int main(int argc, char *argv[])
 				usage();
 				exit(1);
 			}
-			output_image = argv[i];
+			gen.output = strdup(argv[i]);
 		}
 
 		/*
@@ -1232,13 +1234,11 @@ int main(int argc, char *argv[])
 	}
 
 	/* check configuration */
-	if (output_image == NULL) {
+	if (gen.output == NULL) {
 		fprintf(stderr, "no outimage\n");
 		usage();
 		exit(1);
 	}
-
-	gen.output = output_image;
 
 	/* number of images */
 	nb_img = argc - i;
@@ -1344,6 +1344,14 @@ int main(int argc, char *argv[])
 	if (alpha)
 		gen.hash ^= hash(1);
 
+	/* Apply hash on the output images */
+	p = strstr(gen.output, "XXXXXXXX");
+	if (p) {
+		snprintf(hashstr, 9, "%08x", gen.hash);
+		memcpy(p, hashstr, 8);
+	}
+
+
 	/* Dump header templates file */
 	stnode.width = 0;
 	stnode.height = 0;
@@ -1371,7 +1379,7 @@ int main(int argc, char *argv[])
 		close_tpl(tpl, &gen);
 
 	/* draw png outpout image */
-	drawpng(surf, larg, top, qual, interlace, alpha, output_image);
+	drawpng(surf, larg, top, qual, interlace, alpha, gen.output);
 
 	return 0;
 }
