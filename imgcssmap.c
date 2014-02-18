@@ -82,11 +82,8 @@ struct template_elem {
 struct template {
 	struct template *next;
 
-	char *hdr;
-	char *foot;
-
-	int nb;
-	struct template_elem *elems;
+	int nb[3];
+	struct template_elem *elems[3];
 
 	FILE *fh;
 };
@@ -800,12 +797,19 @@ struct template *load_tpl(const char *in_file, const char *hdr, const char *foot
 	}
 
 	/* Load header file */
-	if (hdr)
-		tpl->hdr = load_file(hdr);
+	if (hdr) {
+		bloc = load_file(hdr);
+		tpl->elems[0] = parse_tpl(bloc, &tpl->nb[0]);
+	}
+
+	/* Load "each line" template */
+	bloc = load_file(in_file);
+	tpl->elems[1] = parse_tpl(bloc, &tpl->nb[1]);
 
 	/* Load footer file */
 	if (foot)
-		tpl->foot = load_file(foot);
+		bloc = load_file(foot);
+		tpl->elems[2] = parse_tpl(bloc, &tpl->nb[2]);
 
 	/* open output template file */
 	tpl->fh = fopen(out_file, "w");
@@ -815,24 +819,17 @@ struct template *load_tpl(const char *in_file, const char *hdr, const char *foot
 		exit(1);
 	}
 
-	bloc = load_file(in_file);
-	tpl->elems = parse_tpl(bloc, &tpl->nb);
-
-	/* Dump header file */
-	if (tpl->hdr)
-		fputs(tpl->hdr, tpl->fh);
-
 	return tpl;
 }
 
-void exec_tpl(struct template *tpl, struct node *node, int id)
+void exec_tpl(struct template *tpl, int idx, struct node *node, int id)
 {
 	int i;
 
-	for (i=0; i<tpl->nb; i++) {
-		switch(tpl->elems[i].type) {
+	for (i=0; i<tpl->nb[idx]; i++) {
+		switch(tpl->elems[idx][i].type) {
 		case ELEM_STRING:
-			fprintf(tpl->fh, "%s", tpl->elems[i].string);
+			fprintf(tpl->fh, "%s", tpl->elems[idx][i].string);
 			break;
 		case ELEM_WIDTH:
 			fprintf(tpl->fh, "%lu", node->width);
@@ -861,8 +858,16 @@ void exec_tpl(struct template *tpl, struct node *node, int id)
 
 void close_tpl(struct template *tpl)
 {
-	if (tpl->foot)
-		fputs(tpl->foot, tpl->fh);
+	struct node stnode;
+
+	stnode.width = 0;
+	stnode.height = 0;
+	stnode.dest_x = 0;
+	stnode.dest_y = 0;
+	stnode.name = "";
+	stnode.azname = "";
+
+	exec_tpl(tpl, 2, &stnode, 0);
 
 	fclose(tpl->fh);
 }
@@ -1036,6 +1041,7 @@ int main(int argc, char *argv[])
 	struct color _alpha;
 	struct color *alpha = NULL;
 	int do_crop = 0;
+	struct node stnode;
 
 	/* memoire pour le tri */
 	pool = calloc(sizeof(struct node *), argc - 1);
@@ -1275,22 +1281,36 @@ int main(int argc, char *argv[])
 			if (do_break)
 				break;
 		}
+	}
 
-		/* execute template */
+	/* Dump header templates file */
+	stnode.width = 0;
+	stnode.height = 0;
+	stnode.dest_x = 0;
+	stnode.dest_y = 0;
+	stnode.name = "";
+	stnode.azname = "";
+	for (tpl = templates;
+	     tpl != NULL;
+	     tpl = tpl->next)
+		exec_tpl(tpl, 0, &stnode, 0);
+
+	/* on parcours les images pour executer les templates */
+	for (i=0; i<nb_img; i++) {
 		for (tpl = templates;
 		     tpl != NULL; 
 		     tpl = tpl->next)
-			exec_tpl(tpl, node, i);
+			exec_tpl(tpl, 1, pool[i], i);
 	}
-
-	/* draw png outpout image */
-	drawpng(surf, larg, top, qual, interlace, alpha, output_image);
 
 	/* close templates */
 	for (tpl = templates;
 	     tpl != NULL; 
 	     tpl = tpl->next)
 		close_tpl(tpl);
+
+	/* draw png outpout image */
+	drawpng(surf, larg, top, qual, interlace, alpha, output_image);
 
 	return 0;
 }
