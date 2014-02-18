@@ -76,7 +76,7 @@ enum template_elem_type {
 
 struct template_elem {
 	enum template_elem_type type;
-	const char *string;
+	char *string;
 };
 
 struct template {
@@ -688,42 +688,16 @@ char *load_file(const char *in_file)
 	return bloc;
 }
 
-struct template *load_tpl(const char *in_file, const char *hdr, const char *foot, const char *out_file)
+struct template_elem *parse_tpl(const char *bloc, int *outnb)
 {
 	enum template_elem_type type;
-	struct template *tpl;
-	char *bloc;
-	char *var;
-	char *nvar;
-	char *p;
-	char *cont;
+	struct template_elem *elems = NULL;
+	int nb = 0;
+	const char *p;
+	const char *var;
+	const char *nvar;
+	const char *cont;
 
-	/* memory for the template */
-	tpl = calloc(sizeof(struct template), 1);
-	if (tpl == NULL) {
-		fprintf(stderr, "out of memory\n");
-		exit(1);
-	}
-
-	/* Load header file */
-	if (hdr)
-		tpl->hdr = load_file(hdr);
-
-	/* Load footer file */
-	if (foot)
-		tpl->foot = load_file(foot);
-
-	/* open output template file */
-	tpl->fh = fopen(out_file, "w");
-	if (tpl->fh == NULL) {
-		fprintf(stderr, "cannot open file \"%s\": %s\n",
-		        out_file, strerror(errno));
-		exit(1);
-	}
-
-	bloc = load_file(in_file);
-
-	/* on decoupe tout ça */
 	p = bloc;
 	while (1) {
 
@@ -772,27 +746,33 @@ struct template *load_tpl(const char *in_file, const char *hdr, const char *foot
 
 		/* copy string if is not empty */
 		if (p != var) {
-			tpl->nb++;
-			tpl->elems = realloc(tpl->elems, sizeof(struct template_elem) * tpl->nb);
-			if (tpl->elems == NULL) {
+			nb++;
+			elems = realloc(elems, sizeof(struct template_elem) * nb);
+			if (elems == NULL) {
 				fprintf(stderr, "out of memory\n");
 				exit(1);
 			}
-			tpl->elems[tpl->nb-1].string = p;
-			tpl->elems[tpl->nb-1].type = ELEM_STRING;
+			if (!var) {
+				elems[nb-1].string = strdup(p);
+			}
+			else {
+				elems[nb-1].string = malloc(var - p + 1);
+				memcpy(elems[nb-1].string, p, var - p);
+				elems[nb-1].string[var - p] = '\0';
+			}
+			elems[nb-1].type = ELEM_STRING;
 		}
 
 		/* copy variable element */
 		if (var != NULL) {
-			*var = '\0'; /* end of previous string */
-			tpl->nb++;
-			tpl->elems = realloc(tpl->elems, sizeof(struct template_elem) * tpl->nb);
-			if (tpl->elems == NULL) {
+			nb++;
+			elems = realloc(elems, sizeof(struct template_elem) * nb);
+			if (elems == NULL) {
 				fprintf(stderr, "out of memory\n");
 				exit(1);
 			}
-			tpl->elems[tpl->nb-1].string = NULL;
-			tpl->elems[tpl->nb-1].type = type;
+			elems[nb-1].string = NULL;
+			elems[nb-1].type = type;
 		}
 
 		/* is the end of parsing */
@@ -802,6 +782,41 @@ struct template *load_tpl(const char *in_file, const char *hdr, const char *foot
 		/* continue parsing */
 		p = cont;
 	}
+
+	*outnb = nb;
+	return elems;
+}
+
+struct template *load_tpl(const char *in_file, const char *hdr, const char *foot, const char *out_file)
+{
+	struct template *tpl;
+	char *bloc;
+
+	/* memory for the template */
+	tpl = calloc(sizeof(struct template), 1);
+	if (tpl == NULL) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+
+	/* Load header file */
+	if (hdr)
+		tpl->hdr = load_file(hdr);
+
+	/* Load footer file */
+	if (foot)
+		tpl->foot = load_file(foot);
+
+	/* open output template file */
+	tpl->fh = fopen(out_file, "w");
+	if (tpl->fh == NULL) {
+		fprintf(stderr, "cannot open file \"%s\": %s\n",
+		        out_file, strerror(errno));
+		exit(1);
+	}
+
+	bloc = load_file(in_file);
+	tpl->elems = parse_tpl(bloc, &tpl->nb);
 
 	/* Dump header file */
 	if (tpl->hdr)
